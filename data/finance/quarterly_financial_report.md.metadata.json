@@ -1,0 +1,15 @@
+{
+  "metadataAttributes": {
+    "doc_id": "FIN-QTR-REPORT-2024",
+    "department": "finance",
+    "allowed_roles": [
+      "Finance",
+      "C-Level"
+    ],
+    "classification_level": "confidential",
+    "fiscal_year": 2024,
+    "contains_pii": false,
+    "document_type": "quarterly_financial_report",
+    "source_uri": "data/finance/quarterly_financial_report.md"
+  }
+}

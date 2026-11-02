@@ -1,0 +1,15 @@
+{
+  "metadataAttributes": {
+    "doc_id": "FIN-SUMMARY-2024",
+    "department": "finance",
+    "allowed_roles": [
+      "Finance",
+      "C-Level"
+    ],
+    "classification_level": "confidential",
+    "fiscal_year": 2024,
+    "contains_pii": false,
+    "document_type": "financial_summary",
+    "source_uri": "data/finance/financial_summary.md"
+  }
+}

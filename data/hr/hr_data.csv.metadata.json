@@ -1,0 +1,15 @@
+{
+  "metadataAttributes": {
+    "doc_id": "HR-PAYROLL-PII-2024",
+    "department": "hr",
+    "allowed_roles": [
+      "HR",
+      "C-Level"
+    ],
+    "classification_level": "strictly_confidential_pii",
+    "fiscal_year": 2024,
+    "contains_pii": true,
+    "document_type": "employee_records",
+    "source_uri": "data/hr/hr_data.csv"
+  }
+}

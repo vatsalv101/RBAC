@@ -1,0 +1,15 @@
+{
+  "metadataAttributes": {
+    "doc_id": "MKT-Q4-2024",
+    "department": "marketing",
+    "allowed_roles": [
+      "Marketing",
+      "C-Level"
+    ],
+    "classification_level": "internal",
+    "fiscal_year": 2024,
+    "contains_pii": false,
+    "document_type": "marketing_quarterly_report",
+    "source_uri": "data/marketing/market_report_q4_2024.md"
+  }
+}

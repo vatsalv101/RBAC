@@ -1,0 +1,19 @@
+{
+  "metadataAttributes": {
+    "doc_id": "GEN-HANDBOOK-2024",
+    "department": "general",
+    "allowed_roles": [
+      "Employee",
+      "Finance",
+      "HR",
+      "Engineering",
+      "Marketing",
+      "C-Level"
+    ],
+    "classification_level": "internal_public",
+    "fiscal_year": 2024,
+    "contains_pii": false,
+    "document_type": "employee_handbook",
+    "source_uri": "data/general/employee_handbook.md"
+  }
+}

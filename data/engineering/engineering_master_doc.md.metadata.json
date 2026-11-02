@@ -1,0 +1,15 @@
+{
+  "metadataAttributes": {
+    "doc_id": "ENG-MASTER-2024",
+    "department": "engineering",
+    "allowed_roles": [
+      "Engineering",
+      "C-Level"
+    ],
+    "classification_level": "internal_restricted",
+    "fiscal_year": 2024,
+    "contains_pii": false,
+    "document_type": "architecture_specification",
+    "source_uri": "data/engineering/engineering_master_doc.md"
+  }
+}
