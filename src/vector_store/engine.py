@@ -1,52 +1,101 @@
 """
-Vector Engine Manager (In-Memory Local Mode + Cloud Parity)
-Enforces RBAC pre-filtering at the index layer using scalar payload indexing.
+Vector Engine Manager (Qdrant Cloud + Local Fallback)
+Connects to managed cloud vector cluster with automatic scalar payload indexing.
 """
+import os
 from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
 
+# Load environment variables from .env
+load_dotenv()
+
 
 class VectorEngine:
-    def __init__(self, location: str = ":memory:", collection_name: str = "finsolve_enterprise_rag"):
+    def __init__(
+        self,
+        location: Optional[str] = None,
+        api_key: Optional[str] = None,
+        collection_name: str = "finsolve_enterprise_rag"
+    ):
         """
-        location: ':memory:' for zero-dependency local testing,
-                  or a cloud URL (e.g. 'https://xyz.qdrant.tech') when ready for cloud.
+        If location == ':memory:', runs in local in-memory mode.
+        If cloud URL & API key are present, connects to managed Qdrant Cloud.
         """
-        self.location = location
         self.collection_name = collection_name
-        self.client = QdrantClient(location=location)
 
-    def initialize_collection(self, vector_dim: int = 4):
-        """
-        Creates collection and sets up payload indexes for RBAC.
-        """
-        # 1. Create Collection with Cosine distance
-        self.client.create_collection(
-            collection_name=self.collection_name,
-            vectors_config=rest.VectorParams(
-                size=vector_dim,
-                distance=rest.Distance.COSINE
+        if location == ":memory:":
+            print("[LOCAL] In-memory mode explicitly requested (:memory:)")
+            self.client = QdrantClient(location=":memory:")
+            self.is_cloud = False
+            self.cloud_url = ":memory:"
+            self.api_key = None
+        elif (location or os.getenv("QDRANT_CLOUD_URL")) and (api_key or os.getenv("QDRANT_API_KEY")):
+            self.cloud_url = location or os.getenv("QDRANT_CLOUD_URL")
+            self.api_key = api_key or os.getenv("QDRANT_API_KEY")
+            print(f"[CLOUD] Connecting to Managed Qdrant Cloud: {self.cloud_url}")
+            self.client = QdrantClient(
+                url=self.cloud_url,
+                api_key=self.api_key,
+                timeout=30.0
             )
-        )
+            self.is_cloud = True
+        else:
+            print("[LOCAL] No cloud credentials found. Using local in-memory storage (:memory:)")
+            self.client = QdrantClient(location=":memory:")
+            self.is_cloud = False
+            self.cloud_url = ":memory:"
+            self.api_key = None
 
-        # 2. CREATE SCALAR PAYLOAD INDEXES (for cloud deployment)
-        if self.location != ":memory:":
+    def initialize_collection(self, vector_dim: int = 384):
+        """
+        Creates collection and configures real scalar payload indexes on the cloud cluster.
+        """
+        collections = [c.name for c in self.client.get_collections().collections]
+
+        if self.collection_name not in collections:
+            print(f"Creating collection '{self.collection_name}' (dim={vector_dim}, metric=Cosine)...")
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=rest.VectorParams(
+                    size=vector_dim,
+                    distance=rest.Distance.COSINE
+                )
+            )
+            print(f"Collection '{self.collection_name}' created successfully.")
+        else:
+            print(f"Collection '{self.collection_name}' already exists.")
+
+        # If on Cloud, create the inverted indexes for lightning-fast RBAC pre-filtering
+        if self.is_cloud:
+            self._create_cloud_payload_indexes()
+
+    def _create_cloud_payload_indexes(self):
+        """
+        Creates inverted scalar payload indexes on the cloud cluster.
+        Crucial for high-speed RBAC pre-filtering without full-table scans.
+        """
+        index_specs = [
+            ("allowed_roles", rest.PayloadSchemaType.KEYWORD),
+            ("department", rest.PayloadSchemaType.KEYWORD),
+            ("classification_level", rest.PayloadSchemaType.KEYWORD),
+            ("doc_id", rest.PayloadSchemaType.KEYWORD),
+            ("fiscal_year", rest.PayloadSchemaType.INTEGER),
+            ("contains_pii", rest.PayloadSchemaType.BOOL),
+        ]
+        for field, schema in index_specs:
             self.client.create_payload_index(
                 collection_name=self.collection_name,
-                field_name="allowed_roles",
-                field_schema=rest.PayloadSchemaType.KEYWORD
+                field_name=field,
+                field_schema=schema,
+                wait=True
             )
-            self.client.create_payload_index(
-                collection_name=self.collection_name,
-                field_name="department",
-                field_schema=rest.PayloadSchemaType.KEYWORD
-            )
+        print("[SUCCESS] Cloud scalar payload indexes verified and active.")
 
-    def upsert_chunks(self, points: List[Dict[str, Any]]):
+    def upsert_chunks(self, points: List[Dict[str, Any]], batch_size: int = 64):
         """
-        Inserts chunks into the vector store.
-        Each point has: id, vector, and payload (text + metadata).
+        Batch-upserts chunks to the cloud vector store.
         """
         qdrant_points = [
             rest.PointStruct(
@@ -56,10 +105,16 @@ class VectorEngine:
             )
             for p in points
         ]
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=qdrant_points
-        )
+
+        total = len(qdrant_points)
+        for i in range(0, total, batch_size):
+            batch = qdrant_points[i : i + batch_size]
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=batch,
+                wait=True
+            )
+            print(f"   Uploaded batch {min(i + batch_size, total)}/{total} points...")
 
     def search_with_rbac(
         self,
@@ -68,10 +123,8 @@ class VectorEngine:
         limit: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Executes strict RBAC PRE-FILTERED search.
-        Uses modern Qdrant query_points.
+        Executes strict RBAC PRE-FILTERED search on the cloud database.
         """
-        # If user is C-Level, they have global access (no filter needed)
         rbac_filter = None
         if "C-Level" not in user_roles:
             rbac_filter = rest.Filter(
@@ -83,7 +136,6 @@ class VectorEngine:
                 ]
             )
 
-        # Modern Qdrant API: query_points
         search_result = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
